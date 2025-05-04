@@ -10,7 +10,7 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import * as h3 from 'h3-js';
-import type { Part } from 'genkit'; // Import Part type
+import type { Part, Message, Role } from 'genkit'; // Import Message and Role types
 
 // Define the structure for a single chat message (used internally in the component)
 const ChatMessageSchema = z.object({
@@ -117,14 +117,14 @@ const incidentChatFlow = ai.defineFlow<
   },
   async (input) => {
 
-    // Convert ChatMessage history to the format expected by ai.generate (Array<Part>)
-    const promptMessages: Part[] = [
-      // System/Initial prompt part (optional, but good practice)
-      // { role: 'system', content: [{ text: "You are..." }] }, // If needed
+    // Convert ChatMessage history to the format expected by ai.generate (Array<Message>)
+    const messages: Message[] = [
+      // System prompt can be the first message if needed, or omitted if handled by the prompt template
+      // { role: 'system', content: [{ text: "You are..." }] },
 
       // Map history messages
       ...input.history.map(msg => ({
-          role: msg.role,
+          role: msg.role as Role, // Cast to Role type
           content: [{ text: msg.content }] // Wrap content in array with text part
       })),
       // Add the latest user message
@@ -133,7 +133,7 @@ const incidentChatFlow = ai.defineFlow<
 
     const result = await ai.generate({
         model: ai.model, // Use the default model configured in ai-instance
-        prompt: promptMessages,
+        messages: messages, // Use 'messages' field for chat history
         output: { schema: IncidentChatOutputSchema, format: 'json' },
         tools: [verifyH3Index],
         toolChoice: 'auto',
@@ -142,6 +142,7 @@ const incidentChatFlow = ai.defineFlow<
 
     let response = result.output;
     let currentContent = result.content || []; // Initialize with existing content if any
+    let currentMessages = messages; // Keep track of messages for tool follow-up
 
     // Handle tool requests if any
     if (result.requests?.length) {
@@ -153,16 +154,19 @@ const incidentChatFlow = ai.defineFlow<
              }
         }
 
+        // Add the model's initial response (containing the tool request) and the tool responses to the message history
+        currentMessages = [
+            ...messages,
+            { role: 'model' as const, content: currentContent },
+            ...toolResponses.map(tr => ({ role: tr.role, content: tr.content }))
+        ];
+
 
         // Send the tool responses back to the model to continue generation
         const followUpResult = await ai.generate({
             model: ai.model,
-            prompt: [
-                ...promptMessages,
-                ...currentContent, // Include the model's previous partial content if any
-                ...toolResponses // Add the results from the tool calls
-            ],
-             output: { schema: IncidentChatOutputSchema, format: 'json' },
+            messages: currentMessages, // Use updated messages including tool responses
+            output: { schema: IncidentChatOutputSchema, format: 'json' },
             tools: [verifyH3Index],
             // No toolChoice needed here, we expect a text response now
         });
