@@ -10,20 +10,23 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import * as h3 from 'h3-js';
+import type { Part } from 'genkit'; // Import Part type
 
-// Define the structure for a single chat message
+// Define the structure for a single chat message (used internally in the component)
 const ChatMessageSchema = z.object({
   role: z.enum(['user', 'model']),
   content: z.string(),
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
+// Define the structure for the flow input, containing history and the new message
 const IncidentChatInputSchema = z.object({
   history: z.array(ChatMessageSchema).describe('The chat history so far.'),
   message: z.string().describe('The latest user message.'),
 });
 export type IncidentChatInput = z.infer<typeof IncidentChatInputSchema>;
 
+// Define the structure for the flow output
 const IncidentChatOutputSchema = z.object({
   response: z.string().describe('The AI model\'s response message.'),
   // Optional: Add fields to indicate if zoneId and description are collected
@@ -33,7 +36,7 @@ const IncidentChatOutputSchema = z.object({
 });
 export type IncidentChatOutput = z.infer<typeof IncidentChatOutputSchema>;
 
-// Define a tool for verifying H3 index (optional but good practice)
+// Define a tool for verifying H3 index
 const verifyH3Index = ai.defineTool(
   {
     name: 'verifyH3Index',
@@ -56,7 +59,8 @@ const verifyH3Index = ai.defineTool(
         // Ignore errors if resolution cannot be determined
       }
     }
-    return { isValid, resolution };
+    // Forcing resolution 2 check
+    return { isValid: isValid && resolution === 2, resolution };
   }
 );
 
@@ -65,17 +69,28 @@ export async function processChat(input: IncidentChatInput): Promise<IncidentCha
   return incidentChatFlow(input);
 }
 
-const prompt = ai.definePrompt({
+// Note: The ai.definePrompt is not directly used by ai.generate with a history array,
+// but it helps document the expected input/output and can be used for single-turn scenarios.
+// The system prompt logic is embedded in the flow's initial message construction.
+const promptDefinition = ai.definePrompt({
   name: 'incidentChatPrompt',
   input: { schema: IncidentChatInputSchema },
   output: { schema: IncidentChatOutputSchema },
   tools: [verifyH3Index], // Make the tool available
   prompt: `You are an AI assistant for Natureza AI, helping users report environmental incidents.
 Engage in a natural conversation to collect the following information:
-1.  **Incident Location:** Ask for the location. If the user provides coordinates or a place name, guide them towards providing or confirming the Uber H3 Zone ID (specifically resolution 2). You can use the verifyH3Index tool to check if a provided ID is valid and if it's resolution 2. If it's valid but not resolution 2, gently ask if they can provide the resolution 2 ID. If invalid, inform them and ask again.
+1.  **Incident Location:** Ask for the location. Guide the user towards providing or confirming the Uber H3 Zone ID (specifically resolution 2). Use the verifyH3Index tool to check if a provided ID is valid and if it's resolution 2. If it's valid but not resolution 2, ask for the resolution 2 ID. If invalid, inform them and ask again.
 2.  **Incident Description:** Ask the user to describe what happened.
 
-Keep the conversation friendly and helpful.
+Keep the conversation friendly and helpful. Use the verifyH3Index tool when the user provides something that looks like an H3 index.
+
+Once you believe you have a valid resolution 2 H3 Zone ID AND a description:
+1. Summarize the collected information (Zone ID and Description).
+2. Ask the user to confirm if the summary is correct.
+3. If confirmed, set 'isComplete' to true and inform the user the report is ready.
+4. If not confirmed, ask what needs correction.
+
+Structure your output ONLY as a JSON object matching the IncidentChatOutput schema.
 
 **Conversation History:**
 {{#each history}}
@@ -86,17 +101,11 @@ Keep the conversation friendly and helpful.
 user: {{{message}}}
 
 **Your Task:**
-Respond to the user's latest message. Ask clarifying questions if needed to get the Zone ID (resolution 2) and description. Use the verifyH3Index tool when the user provides something that looks like an H3 index.
-
-Once you believe you have a valid resolution 2 H3 Zone ID AND a description:
-1. Summarize the collected information (Zone ID and Description).
-2. Ask the user to confirm if the summary is correct.
-3. If confirmed, set 'isComplete' to true in your response object and inform the user that the report is ready to be submitted (but don't actually submit it).
-4. If not confirmed, ask the user what needs to be corrected.
-
-Structure your output ONLY as a JSON object matching the IncidentChatOutput schema, including the 'response' field and optionally 'zoneId', 'description', and 'isComplete' based on the conversation state.`,
+Respond to the user's latest message based on the history and instructions above.`,
 });
 
+
+// Define the flow
 const incidentChatFlow = ai.defineFlow<
   typeof IncidentChatInputSchema,
   typeof IncidentChatOutputSchema
@@ -107,10 +116,19 @@ const incidentChatFlow = ai.defineFlow<
     outputSchema: IncidentChatOutputSchema,
   },
   async (input) => {
-    // Construct the full prompt history for the model
-    const promptMessages = [
-        ...input.history.map(msg => ({ role: msg.role, content: msg.content })),
-        { role: 'user' as const, content: input.message },
+
+    // Convert ChatMessage history to the format expected by ai.generate (Array<Part>)
+    const promptMessages: Part[] = [
+      // System/Initial prompt part (optional, but good practice)
+      // { role: 'system', content: [{ text: "You are..." }] }, // If needed
+
+      // Map history messages
+      ...input.history.map(msg => ({
+          role: msg.role,
+          content: [{ text: msg.content }] // Wrap content in array with text part
+      })),
+      // Add the latest user message
+      { role: 'user' as const, content: [{ text: input.message }] } // Wrap content
     ];
 
     const result = await ai.generate({
@@ -118,33 +136,37 @@ const incidentChatFlow = ai.defineFlow<
         prompt: promptMessages,
         output: { schema: IncidentChatOutputSchema, format: 'json' },
         tools: [verifyH3Index],
-        toolChoice: 'auto', // Let the model decide when to use the tool
+        toolChoice: 'auto',
     });
 
 
     let response = result.output;
+    let currentContent = result.content || []; // Initialize with existing content if any
 
-    // If the model generated tool requests, handle them
+    // Handle tool requests if any
     if (result.requests?.length) {
-        // For this simple case, we assume only one tool request at a time
-        const request = result.requests[0];
-        if (request.toolName === 'verifyH3Index') {
-            const toolResponse = await verifyH3Index(request.input);
-
-            // Send the tool response back to the model to continue generation
-            const followUpResult = await ai.generate({
-                model: ai.model,
-                prompt: [
-                    ...promptMessages,
-                    { role: 'model', content: result.content }, // Include the model's previous partial content if any
-                    { role: 'tool', content: { output: toolResponse }, toolName: 'verifyH3Index' }
-                ],
-                 output: { schema: IncidentChatOutputSchema, format: 'json' },
-                tools: [verifyH3Index],
-                // No toolChoice needed here, we expect a text response now
-            });
-            response = followUpResult.output;
+        const toolResponses: Part[] = [];
+        for (const request of result.requests) {
+             if (request.toolName === 'verifyH3Index') {
+                const toolResponseData = await verifyH3Index(request.input);
+                toolResponses.push({ role: 'tool', content: [{ output: toolResponseData, toolName: 'verifyH3Index' }] });
+             }
         }
+
+
+        // Send the tool responses back to the model to continue generation
+        const followUpResult = await ai.generate({
+            model: ai.model,
+            prompt: [
+                ...promptMessages,
+                ...currentContent, // Include the model's previous partial content if any
+                ...toolResponses // Add the results from the tool calls
+            ],
+             output: { schema: IncidentChatOutputSchema, format: 'json' },
+            tools: [verifyH3Index],
+            // No toolChoice needed here, we expect a text response now
+        });
+        response = followUpResult.output;
     }
 
 
@@ -164,7 +186,6 @@ const incidentChatFlow = ai.defineFlow<
 );
 
 // Define a function to submit the final report (can be called from the chat interface later)
-// This is similar to the logic previously in the API route
 export async function submitCollectedIncident(zoneId: string, message: string): Promise<{ status: string; message: string }> {
     'use server';
     // You might want to re-integrate AI verification here if needed
