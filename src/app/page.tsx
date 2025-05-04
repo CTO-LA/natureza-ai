@@ -14,10 +14,10 @@ export default function Home() {
          <div className="absolute bottom-4 left-4 z-10 bg-card/80 p-2 rounded shadow border backdrop-blur-sm">
              <div className="flex items-center gap-4 text-sm text-muted-foreground">
                  <div className="flex items-center gap-2">
-                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: '#4CAF50' }}></span> Verified
+                     <span className="h-3 w-3 rounded-full bg-primary"></span> Verified
                  </div>
                  <div className="flex items-center gap-2">
-                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: '#FF9800' }}></span> Unverified
+                     <span className="h-3 w-3 rounded-full bg-accent"></span> Unverified
                  </div>
              </div>
          </div>

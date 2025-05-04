@@ -57,13 +57,39 @@ export const MapComponent: React.FC = () => {
     if (!styleElement) {
         styleElement = document.createElement('style');
         styleElement.id = styleId;
+        // Style popup to match the new dark theme
         styleElement.innerHTML = `
             .mapbox-popup-custom .mapboxgl-popup-content {
+                background-color: hsl(var(--card));
+                color: hsl(var(--card-foreground));
                 padding: 8px 12px;
                 font-size: 0.875rem; /* 14px */
                 border-radius: 6px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                border: 1px solid hsl(var(--border));
             }
+            .mapbox-popup-custom .mapboxgl-popup-close-button {
+                color: hsl(var(--card-foreground));
+            }
+             .mapbox-popup-custom .mapboxgl-popup-anchor-top .mapboxgl-popup-tip,
+             .mapbox-popup-custom .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip,
+             .mapbox-popup-custom .mapboxgl-popup-anchor-left .mapboxgl-popup-tip,
+             .mapbox-popup-custom .mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+                border-color: transparent; /* Hide default tip border */
+             }
+             /* Adjust tip color to match card background */
+             .mapbox-popup-custom.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+                 border-top-color: hsl(var(--card));
+             }
+             .mapbox-popup-custom.mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
+                 border-bottom-color: hsl(var(--card));
+             }
+             .mapbox-popup-custom.mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+                 border-left-color: hsl(var(--card));
+             }
+             .mapbox-popup-custom.mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+                 border-right-color: hsl(var(--card));
+             }
         `;
         document.head.appendChild(styleElement);
     }
@@ -71,7 +97,7 @@ export const MapComponent: React.FC = () => {
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12', // Choose a map style
+      style: 'mapbox://styles/mapbox/dark-v11', // Use a dark map style
       center: [lng, lat] as LngLatLike,
       zoom: zoom,
     });
@@ -116,12 +142,12 @@ export const MapComponent: React.FC = () => {
           'fill-color': [
             'match',
             ['get', 'status'], // Get the status property
-            'verified', '#4CAF50', // Green for verified (using hex for direct Tailwind color match)
-            'unverified', '#FF9800', // Orange for unverified (using hex for direct Tailwind color match)
-            '#cccccc' // Default color (gray) if status is something else
+            'verified', 'hsl(var(--primary))', // Use primary color (green) for verified
+            'unverified', 'hsl(var(--accent))', // Use accent color (teal) for unverified
+            'hsl(var(--muted))' // Default color (muted gray-cyan)
           ],
-          'fill-opacity': 0.6,
-          'fill-outline-color': '#333333', // Dark outline
+          'fill-opacity': 0.7, // Slightly increased opacity
+          'fill-outline-color': 'hsl(var(--border))', // Use border color for outline
         },
       });
 
@@ -130,9 +156,11 @@ export const MapComponent: React.FC = () => {
          if (e.features && e.features.length > 0) {
             const feature = e.features[0] as HexFeature; // Cast to our specific type
             const coordinates = e.lngLat;
-            const description = `<div class="p-1"><strong class="font-medium">Hex ID:</strong> ${feature.properties.id}<br><strong class="font-medium">Status:</strong> <span style="color: ${feature.properties.status === 'verified' ? '#4CAF50' : '#FF9800'}">${feature.properties.status}</span></div>`;
+            // Use theme colors in popup
+            const statusColor = feature.properties.status === 'verified' ? 'hsl(var(--primary))' : 'hsl(var(--accent))';
+            const description = `<div class="p-1 font-sans"><strong class="font-medium text-foreground/80">Hex ID:</strong> ${feature.properties.id}<br><strong class="font-medium text-foreground/80">Status:</strong> <span style="color: ${statusColor}; text-transform: capitalize;">${feature.properties.status}</span></div>`;
 
-            new mapboxgl.Popup({ closeButton: false, className: 'mapbox-popup-custom' })
+            new mapboxgl.Popup({ closeButton: true, className: 'mapbox-popup-custom' })
               .setLngLat(coordinates)
               .setHTML(description)
               .addTo(map.current!);
