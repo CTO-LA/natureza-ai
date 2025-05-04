@@ -5,7 +5,7 @@ import Link from 'next/link';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster'; // Import Toaster
 import { Button } from '@/components/ui/button';
-import { Leaf, MapPin, FileText } from 'lucide-react';
+import { MapPin, FileText } from 'lucide-react'; // Keep existing icons
 
 export const metadata: Metadata = {
   title: 'Natureza AI Prototype',
@@ -24,12 +24,22 @@ export default function RootLayout({
         <header className="bg-card text-card-foreground border-b border-border py-3 px-4 md:px-6 shadow-md sticky top-0 z-50">
           <div className="container mx-auto flex justify-between items-center">
             <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/90">
-              {/* Consider replacing Leaf with a more abstract/techy icon or SVG logo if available */}
-              {/* <Leaf className="h-7 w-7 text-primary" /> */}
-               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7 text-primary">
-                 <path d="M12 2l3.09 6.32L22 9.27l-5 4.87L18.18 22 12 18.34 5.82 22 7 14.14l-5-4.87 6.91-1.05L12 2z"></path> {/* Example Star Icon */}
-                 <line x1="12" y1="8" x2="12" y2="14"></line>
-                 <line x1="9" y1="11" x2="15" y2="11"></line>
+              {/* Replace star SVG with Natureza AI logo placeholder SVG */}
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="h-7 w-7 text-primary">
+                 <defs>
+                   <linearGradient id="naturezaLeafGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                     <stop offset="0%" style={{ stopColor: 'hsl(var(--primary))', stopOpacity: 1 }} />
+                     <stop offset="100%" style={{ stopColor: 'hsl(120, 50%, 55%)', stopOpacity: 1 }} /> {/* Lighter green */}
+                   </linearGradient>
+                   <linearGradient id="naturezaWaterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                     <stop offset="0%" style={{ stopColor: 'hsl(var(--accent))', stopOpacity: 1 }} />
+                      <stop offset="100%" style={{ stopColor: 'hsl(190, 70%, 60%)', stopOpacity: 1 }} /> {/* Lighter teal/cyan */}
+                   </linearGradient>
+                 </defs>
+                 {/* Simplified representation based on logo description */}
+                 <path d="M50 10 C 70 30, 70 70, 50 90 C 30 70, 30 30, 50 10 Z" fill="url(#naturezaLeafGradient)" transform="rotate(45 50 50)" />
+                 <path d="M50 15 Q 60 45, 50 65 Q 40 45, 50 15 Z" fill="url(#naturezaWaterGradient)" transform="translate(0, 10) rotate(-15 50 50)" opacity="0.8"/>
+                 <circle cx="50" cy="50" r="5" fill="hsl(var(--primary-foreground))" opacity="0.9"/>
                </svg>
               <h1 className="text-xl md:text-2xl font-bold text-foreground">Natureza AI</h1>
             </Link>
