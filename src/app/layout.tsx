@@ -35,6 +35,7 @@ export default function RootLayout({
                    <span className="md:hidden">Map</span>
                  </Link>
                </Button>
+               {/* This button correctly links to the /report page */}
                <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary/80" asChild>
                  <Link href="/report">
                    <FileText className="h-4 w-4 mr-1 md:mr-2" />
